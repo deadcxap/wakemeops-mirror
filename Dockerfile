@@ -14,5 +14,5 @@ ENV MIRROR_ARCHITECTURES=amd64 HOME=/tmp
 USER 99:100
 VOLUME ["/mirror"]
 EXPOSE 8080
-HEALTHCHECK --interval=1m --timeout=5s --start-period=2h CMD ["python3", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8080/wakemeops/dists/stable/InRelease', timeout=3).close()"]
+HEALTHCHECK --interval=1m --timeout=5s --start-period=2h CMD test -s /mirror/current/stable/InRelease && python3 -c "from urllib.request import urlopen; urlopen('http://127.0.0.1:8080/wakemeops/dists/stable/InRelease', timeout=3).close()"
 ENTRYPOINT ["/usr/bin/tini", "-g", "--", "/usr/local/bin/start-mirror"]
