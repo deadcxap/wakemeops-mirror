@@ -7,7 +7,8 @@ network="mirror-test-$$"
 mirror="client-$$"
 origin="origin-$$"
 cleanup() {
-    docker logs --tail 60 "$mirror" 2>/dev/null || true
+    docker logs --tail 60 "$mirror" || true
+    docker logs --tail 12 "$origin" || true
     docker rm -fv "$mirror" "$origin" >/dev/null 2>&1 || true
     docker network rm "$network" >/dev/null 2>&1 || true
     rm -rf "$tmp"
@@ -26,7 +27,7 @@ Architecture: amd64
 Maintainer: Fixture <fixture@example.invalid>
 Description: APT mirror smoke test
 CONTROL
-dpkg-deb --build "$tmp/package" "$repo/pool/mirror-fixture.deb" >/dev/null
+dpkg-deb --root-owner-group --build "$tmp/package" "$repo/pool/mirror-fixture.deb" >/dev/null
 (
     cd "$repo"
     for section in devops terminal; do
@@ -60,6 +61,7 @@ docker run -d --name "$mirror" --network "$network" \
     -v "$tmp/test.gpg:/usr/share/keyrings/wakemeops.gpg:ro" "$image" >/dev/null
 
 for attempt in {1..60}; do
+    [ "$(docker inspect -f '{{.State.Running}}' "$mirror")" = true ] || exit 1
     if docker exec "$mirror" test -s /mirror/current/stable/InRelease; then break; fi
     sleep 1
 done

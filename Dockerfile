@@ -2,7 +2,7 @@ FROM debian:trixie-slim
 ARG REPOSITORY_URL=https://github.com/deadcxap/wakemeops-mirror
 LABEL org.opencontainers.image.source=$REPOSITORY_URL
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        debmirror nginx-light gpg gpgv python3-minimal tini ca-certificates \
+        debmirror nginx-light gpg gpgv python3 tini ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 COPY wakemeops-keyring.asc /usr/share/keyrings/wakemeops.asc
 RUN gpg --batch --dearmor --output /usr/share/keyrings/wakemeops.gpg /usr/share/keyrings/wakemeops.asc \
