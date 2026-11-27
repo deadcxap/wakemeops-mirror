@@ -1,0 +1,71 @@
+# WakeMeOps Mirror для Unraid
+
+Один контейнер скачивает подписанный APT-репозиторий WakeMeOps и раздаёт локальную
+копию через HTTP. HTTPS и домен обслуживает существующий Nginx Proxy Manager.
+Образ для Unraid (`linux/amd64`) собирает и проверяет GitHub Actions. После
+успешной проверки ветки `main` образ публикуется в GHCR с тегами `latest` и
+полным SHA коммита.
+
+## Установка
+
+1. Создайте отдельную share `wakemeops-mirror`. Контейнеру нужен доступ на
+   запись с UID `99` и GID `100`. Для `amd64` ориентир по индексу от 16 ноября
+   2026 года — 38 ГиБ пакетов, для `amd64,arm64` — 67 ГиБ. Оставьте запас
+   для новых версий. Копии индексов используют один общий каталог пакетов.
+2. Сохраните [шаблон Unraid](https://raw.githubusercontent.com/deadcxap/wakemeops-mirror/main/unraid/my-wakemeops-mirror.xml)
+   на флешке Unraid в `/boot/config/plugins/dockerMan/templates-user/my-wakemeops-mirror.xml`.
+   В **Docker → Add Container → Template** выберите `wakemeops-mirror`, проверьте
+   параметры ниже и нажмите **Apply**. Включите **Autostart**.
+3. Для установки через **Add Container** вручную используйте те же значения.
+
+| Поле | Значение по умолчанию |
+| --- | --- |
+| Repository | `ghcr.io/deadcxap/wakemeops-mirror:latest` |
+| Network Type | `bridge` |
+| Path (чтение и запись) | `/mnt/user/wakemeops-mirror` на Unraid → `/mirror` в контейнере |
+| Port | `8988/tcp` на Unraid → `8080/tcp` в контейнере |
+| Variable | `MIRROR_ARCHITECTURES=amd64` |
+
+Архитектуры определяются клиентскими VPS. Допустимы `amd64`, `arm64` и `armhf`;
+несколько значений указывайте через запятую без пробелов. Значение по умолчанию
+покрывает серверы x86-64. Выпуск `stable` и разделы `devops` и `terminal`
+совпадают с настройками ansible-init.
+
+## Nginx Proxy Manager и VPN
+
+Создайте **Proxy Host** для своего поддомена, например `apt.example.net`.
+Для стандартной сети шаблона укажите схему `http`, LAN-адрес Unraid и порт
+`8988`. Если NPM и зеркало в одной пользовательской bridge-сети Docker,
+можно указать имя `wakemeops-mirror` и внутренний порт `8080`.
+Включите TLS для поддомена. Адрес APT-источника — `https://apt.example.net/wakemeops/`.
+
+На роутере направьте в VPN исходящие запросы сервера Unraid к
+`deb.wakemeops.com`. Входящие запросы от VPS приходят на NPM.
+Клиентам нужен доступ к поддомену по HTTPS.
+
+## Синхронизация и проверка
+
+Контейнер запускает первую синхронизацию сразу. Затем он обновляет зеркало
+через 24 часа после успеха или через час после ошибки. Прогресс и ошибки
+доступны в **Docker → Logs**. Зеркало готово после сообщения `Mirror published`.
+До первой успешной публикации URL индекса возвращает HTTP 404.
+
+`debmirror` проверяет подпись ключом WakeMeOps и контрольные суммы файлов.
+Ключ взят из [официального установщика](https://github.com/upciti/wakemeops/blob/main/assets/install_repository),
+отпечаток основного ключа — `A40BA0788E148E2623814ED40CB4FDDCE33DEC9C`.
+После загрузки пакетов контейнер атомарно переключает каталог индексов.
+При сбое клиенты продолжают использовать последнюю опубликованную копию.
+Удаление устаревших пакетов учитывает текущую и предыдущую публикации.
+
+С клиентской VPS проверьте внешний адрес и затем настройте роль Ansible.
+
+```sh
+curl -fsS https://apt.example.net/wakemeops/dists/stable/InRelease -o /dev/null
+```
+
+```yaml
+wakemeops_apt_repository_uri: https://apt.example.net/wakemeops/
+```
+
+После применения роли команды `apt update` и `apt download lazydocker` проверяют
+подпись индексов и скачивание пакета.
