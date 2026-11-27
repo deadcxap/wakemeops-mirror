@@ -62,6 +62,7 @@ docker run -d --name "$mirror" --network "$network" \
 
 for attempt in {1..60}; do
     [ "$(docker inspect -f '{{.State.Running}}' "$mirror")" = true ] || exit 1
+    if docker logs "$mirror" 2>&1 | grep -F 'Retrying in one hour' >/dev/null; then exit 1; fi
     if docker exec "$mirror" test -s /mirror/current/stable/InRelease; then break; fi
     sleep 1
 done

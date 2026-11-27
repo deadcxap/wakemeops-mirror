@@ -1,5 +1,6 @@
 """Synchronize and publish WakeMeOps on a dedicated persistent volume."""
 import fcntl
+import gzip
 import hashlib
 from http.client import HTTPException
 import os
@@ -43,8 +44,15 @@ def complete_indexes(snapshot, architectures):
     for section in SECTIONS:
         for arch in architectures:
             prefix = f"{section}/binary-{arch}/Packages"
-            if prefix not in hashes or not (snapshot / "stable" / prefix).is_file():
+            if prefix not in hashes:
                 raise ValueError(f"Missing signed index for {section}/{arch}")
+            plain = snapshot / "stable" / prefix
+            # debmirror normally keeps only the compressed copy in dists/.
+            if not plain.is_file():
+                with gzip.open(plain.with_suffix(".gz"), "rb") as stream:
+                    plain.write_bytes(stream.read())
+            if hashlib.sha256(plain.read_bytes()).hexdigest() != hashes[prefix]:
+                raise ValueError(f"Wrong SHA256 for {prefix}")
             name = prefix + ".bz2"
             if name in hashes:
                 with urlopen(UPSTREAM + "dists/stable/" + name, timeout=60) as response:
@@ -56,7 +64,7 @@ def complete_indexes(snapshot, architectures):
 
 def sync(architectures):
     subprocess.run([
-        "debmirror", "--method=http", "--host=deb.wakemeops.com", "--root=wakemeops",
+        "debmirror", "--verbose", "--method=http", "--host=deb.wakemeops.com", "--root=wakemeops",
         "--dist=stable", "--section=" + ",".join(SECTIONS), "--arch=" + ",".join(architectures),
         "--nosource", "--rsync-extra=none", "--diff=none", "--slow-cpu", "--getcontents",
         "--check-gpg", "--keyring=/usr/share/keyrings/wakemeops.gpg", "--checksums",
